@@ -1,0 +1,1081 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ล่าสมบัติมรณะ - คณิตศาสตร์ ป.2</title>
+    
+    <!-- Google Font: Mitr -->
+    <link href="https://fonts.googleapis.com/css2?family=Mitr:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    
+    <!-- Tailwind CSS CDN -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    
+    <!-- Three.js CDN -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    
+    <!-- MediaPipe Hands & Camera Utils CDN -->
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js" crossorigin="anonymous"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands/hands.js" crossorigin="anonymous"></script>
+
+    <style>
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+            font-family: 'Mitr', sans-serif;
+            user-select: none;
+        }
+
+        body {
+            width: 100vw;
+            height: 100vh;
+            overflow: hidden;
+            background-color: #0d0f18;
+            color: #fff;
+        }
+
+        #webcam-video {
+            display: none;
+        }
+
+        #canvas-container {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            z-index: 1;
+        }
+
+        /* Screen Layout & Overlays */
+        .screen {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            z-index: 10;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            background: linear-gradient(135deg, rgba(15, 20, 50, 0.95), rgba(45, 15, 70, 0.95));
+            color: #fff;
+            transition: opacity 0.3s ease;
+        }
+
+        .screen.hidden {
+            opacity: 0;
+            pointer-events: none;
+            display: none !important;
+        }
+
+        .card {
+            background: rgba(255, 255, 255, 0.08);
+            backdrop-filter: blur(16px);
+            border: 2px solid rgba(255, 215, 0, 0.4);
+            border-radius: 24px;
+            padding: 35px;
+            width: 650px;
+            max-width: 92%;
+            text-align: center;
+            box-shadow: 0 20px 50px rgba(0,0,0,0.7);
+        }
+
+        h1 {
+            font-size: 2.6rem;
+            color: #FFD700;
+            margin-bottom: 12px;
+            text-shadow: 0 4px 15px rgba(255, 215, 0, 0.4);
+        }
+
+        p, li {
+            font-size: 1.05rem;
+            color: #e2e8f0;
+            line-height: 1.6;
+        }
+
+        /* System Check List */
+        .check-list {
+            margin: 20px 0;
+            background: rgba(0, 0, 0, 0.4);
+            padding: 16px;
+            border-radius: 16px;
+            border: 1px solid rgba(255,255,255,0.1);
+        }
+
+        .check-item {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin: 10px 0;
+            font-size: 1.1rem;
+        }
+
+        .spinner {
+            width: 22px;
+            height: 22px;
+            border: 3px solid rgba(255,255,255,0.2);
+            border-top: 3px solid #FFD700;
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+        }
+
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+
+        .check-status {
+            font-weight: 600;
+        }
+        .check-status.success { color: #2ecc71; }
+        .check-status.error { color: #e74c3c; }
+
+        /* Buttons */
+        .btn {
+            background: linear-gradient(180deg, #2ecc71, #27ae60);
+            color: white;
+            border: none;
+            padding: 12px 36px;
+            font-size: 1.25rem;
+            font-weight: 600;
+            border-radius: 50px;
+            cursor: pointer;
+            box-shadow: 0 6px 0 #1e824c, 0 10px 20px rgba(0,0,0,0.4);
+            transition: all 0.15s ease;
+            margin-top: 12px;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+        }
+
+        .btn:hover:not(:disabled) {
+            transform: translateY(-2px);
+            box-shadow: 0 8px 0 #1e824c, 0 12px 24px rgba(0,0,0,0.5);
+        }
+
+        .btn:active:not(:disabled) {
+            transform: translateY(4px);
+            box-shadow: 0 2px 0 #1e824c, 0 5px 10px rgba(0,0,0,0.4);
+        }
+
+        .btn:disabled {
+            background: #7f8c8d;
+            box-shadow: 0 6px 0 #525e5f;
+            cursor: not-allowed;
+            opacity: 0.6;
+        }
+
+        /* HUD & Gameplay UI */
+        #game-ui {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            z-index: 5;
+            pointer-events: none;
+            display: none;
+        }
+
+        .hud-top {
+            position: absolute;
+            top: 20px;
+            left: 50%;
+            transform: translateX(-50%);
+            display: flex;
+            gap: 20px;
+            background: rgba(10, 15, 30, 0.75);
+            backdrop-filter: blur(8px);
+            padding: 10px 28px;
+            border-radius: 30px;
+            border: 2px solid rgba(255,215,0,0.4);
+            pointer-events: auto;
+            box-shadow: 0 8px 25px rgba(0,0,0,0.5);
+        }
+
+        .hud-box {
+            text-align: center;
+            font-size: 1rem;
+            font-weight: 600;
+            color: #d1d5db;
+            min-width: 90px;
+        }
+
+        .hud-box span {
+            display: block;
+            color: #FFD700;
+            font-size: 1.4rem;
+            font-weight: 700;
+        }
+
+        /* Question Banner */
+        #question-banner {
+            position: absolute;
+            top: 88px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: rgba(15, 23, 42, 0.85);
+            color: #fff;
+            padding: 10px 32px;
+            border-radius: 20px;
+            font-size: 1.5rem;
+            font-weight: 600;
+            border: 2px solid #FFD700;
+            box-shadow: 0 8px 20px rgba(0,0,0,0.6);
+            text-align: center;
+            pointer-events: auto;
+            max-width: 90%;
+        }
+
+        /* Popup Center Text */
+        #popup-center {
+            position: absolute;
+            top: 42%;
+            left: 50%;
+            transform: translate(-50%, -50%) scale(0.8);
+            font-size: 3.5rem;
+            font-weight: 700;
+            opacity: 0;
+            transition: all 0.25s ease;
+            pointer-events: none;
+            z-index: 20;
+            text-shadow: 0 4px 20px rgba(0,0,0,0.9), 0 0 10px rgba(0,0,0,0.8);
+        }
+        #popup-center.show {
+            opacity: 1;
+            transform: translate(-50%, -50%) scale(1.1);
+        }
+        .popup-green { color: #2ecc71; }
+        .popup-red { color: #e74c3c; }
+
+        /* Side Controls */
+        .side-controls {
+            position: absolute;
+            top: 20px;
+            right: 20px;
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+            pointer-events: auto;
+            z-index: 15;
+        }
+
+        .toggle-btn {
+            background: #2ecc71;
+            color: white;
+            border: none;
+            padding: 8px 16px;
+            border-radius: 12px;
+            font-size: 0.95rem;
+            font-weight: 600;
+            cursor: pointer;
+            box-shadow: 0 4px 0 #27ae60;
+            transition: all 0.1s ease;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            min-width: 135px;
+        }
+        .toggle-btn.off {
+            background: #34495e;
+            box-shadow: 0 4px 0 #1f2c39;
+        }
+
+        /* Layout Area Dividers */
+        .zone-divider-left {
+            position: absolute;
+            top: 0;
+            left: 33.33%;
+            width: 2px;
+            height: 100%;
+            background: linear-gradient(180deg, transparent, rgba(255, 215, 0, 0.3), transparent);
+            pointer-events: none;
+        }
+        .zone-divider-right {
+            position: absolute;
+            top: 0;
+            left: 66.66%;
+            width: 2px;
+            height: 100%;
+            background: linear-gradient(180deg, transparent, rgba(255, 215, 0, 0.3), transparent);
+            pointer-events: none;
+        }
+
+        /* On-screen touch buttons for fallback mode */
+        .touch-controls {
+            position: absolute;
+            bottom: 25px;
+            left: 50%;
+            transform: translateX(-50%);
+            display: flex;
+            gap: 15px;
+            pointer-events: auto;
+            z-index: 15;
+        }
+
+        .touch-btn {
+            background: rgba(255, 255, 255, 0.15);
+            backdrop-filter: blur(8px);
+            border: 2px solid rgba(255, 215, 0, 0.5);
+            color: #FFD700;
+            padding: 12px 24px;
+            border-radius: 18px;
+            font-size: 1.1rem;
+            font-weight: 600;
+            cursor: pointer;
+            transition: background 0.2s;
+        }
+        .touch-btn:active {
+            background: rgba(255, 215, 0, 0.4);
+            color: #fff;
+        }
+
+        /* Webcam Feed Mini Overlay */
+        #webcam-preview {
+            position: absolute;
+            bottom: 20px;
+            left: 20px;
+            width: 140px;
+            height: 105px;
+            border-radius: 12px;
+            border: 2px solid #FFD700;
+            overflow: hidden;
+            z-index: 12;
+            transform: scaleX(-1);
+            box-shadow: 0 6px 15px rgba(0,0,0,0.5);
+            background: #000;
+            display: none;
+        }
+        #webcam-preview video {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+        }
+    </style>
+</head>
+<body>
+
+    <!-- Hidden Video for MediaPipe -->
+    <video id="webcam-video" playsinline></video>
+
+    <!-- 3D Canvas Container -->
+    <div id="canvas-container"></div>
+
+    <!-- Mini Camera Preview -->
+    <div id="webcam-preview"></div>
+
+    <!-- START SCREEN -->
+    <div id="start-screen" class="screen">
+        <div class="card">
+            <h1>☠️ ล่าสมบัติมรณะ ☠️</h1>
+            <p style="color: #FFD700; font-weight: 500; font-size: 1.2rem; margin-bottom: 12px;">ผจญภัยถ้ำสมบัติ - คณิตศาสตร์ ป.2</p>
+            <p>ยินดีต้อนรับสู่วิหารโบราณ! แก้โจทย์คณิตศาสตร์เพื่อเปิดหีบสมบัติ และหลบหลีกอันตรายในถ้ำลึกลับ</p>
+            
+            <div class="check-list">
+                <div class="check-item">
+                    <span>📷 ระบบกล้อง (Hand Tracking):</span>
+                    <span id="cam-status" class="check-status"><div class="spinner"></div></span>
+                </div>
+                <div class="check-item">
+                    <span>🔊 ระบบเสียงประกอบ & เสียงพากย์:</span>
+                    <span id="audio-status" class="check-status success">พร้อมใช้งาน</span>
+                </div>
+            </div>
+
+            <p class="text-sm opacity-80 mb-3">💡 คำแนะนำ: ขยับมือ ซ้าย / กลาง / ขวา เพื่อเลือกคำตอบ หรือใช้ปุ่มบนหน้าจอ/คีย์บอร์ด [A, S, D]</p>
+
+            <button id="start-btn" class="btn" disabled>กำลังโหลดระบบ...</button>
+        </div>
+    </div>
+
+    <!-- GAME OVER / VICTORY SCREEN -->
+    <div id="end-screen" class="screen hidden">
+        <div class="card">
+            <h1 id="end-title">🏆 ภารกิจสำเร็จ! 🏆</h1>
+            <p id="end-subtitle" class="text-xl my-3">คุณรวบรวมขุมทรัพย์ได้มหาศาล!</p>
+            
+            <div class="my-6 p-4 bg-black/40 rounded-xl border border-yellow-500/30">
+                <div class="text-lg">คะแนนรวม: <span id="final-score" class="text-yellow-400 font-bold text-2xl">0</span></div>
+                <div class="text-lg mt-2">ตอบถูกต้อง: <span id="final-correct" class="text-green-400 font-bold text-xl">0/10</span> ข้อ</div>
+            </div>
+
+            <button id="restart-btn" class="btn">🎮 เล่นใหม่อีกครั้ง</button>
+        </div>
+    </div>
+
+    <!-- GAMEPLAY HUD -->
+    <div id="game-ui">
+        <div class="hud-top">
+            <div class="hud-box">คะแนน<span id="hud-score">0</span></div>
+            <div class="hud-box">ข้อที่<span id="hud-level">1/10</span></div>
+            <div class="hud-box">พลังชีวิต<span id="hud-hp">❤️❤️❤️</span></div>
+        </div>
+
+        <div id="question-banner">
+            โจทย์: <span id="question-text" class="text-yellow-300 font-bold">12 + 15 = ?</span>
+        </div>
+
+        <div id="popup-center">ถูกต้อง!</div>
+
+        <!-- Side Toggles -->
+        <div class="side-controls">
+            <button id="toggle-voice" class="toggle-btn">
+                🔊 เสียงพากย์ <span>เปิด</span>
+            </button>
+            <button id="toggle-sfx" class="toggle-btn">
+                🎵 เสียงประกอบ <span>เปิด</span>
+            </button>
+            <button id="toggle-cam-view" class="toggle-btn">
+                📹 พรีวิวล้อง <span>ปิด</span>
+            </button>
+        </div>
+
+        <!-- Zone Guides -->
+        <div class="zone-divider-left"></div>
+        <div class="zone-divider-right"></div>
+
+        <!-- Touch Controls Fallback -->
+        <div class="touch-controls">
+            <button class="touch-btn" onclick="selectZone(0)">👈 ซ้าย (A)</button>
+            <button class="touch-btn" onclick="selectZone(1)">👇 ตรงกลาง (S)</button>
+            <button class="touch-btn" onclick="selectZone(2)">👉 ขวา (D)</button>
+        </div>
+    </div>
+
+    <!-- MAIN GAME LOGIC SCRIPT -->
+    <script>
+        // Global Game State
+        let gameState = {
+            score: 0,
+            currentQuestion: 0,
+            totalQuestions: 10,
+            hp: 3,
+            isPlaying: false,
+            voiceEnabled: true,
+            sfxEnabled: true,
+            currentZone: 1, // 0: Left, 1: Center, 2: Right
+            canAnswer: true,
+            questions: []
+        };
+
+        // Audio Context (Synthesized Audio)
+        let audioCtx = null;
+
+        function initAudio() {
+            if (!audioCtx) {
+                audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+            }
+        }
+
+        // Web Audio Synthesizer for SFX
+        function playTone(freq, type, duration, delay = 0) {
+            if (!gameState.sfxEnabled) return;
+            try {
+                initAudio();
+                setTimeout(() => {
+                    let osc = audioCtx.createOscillator();
+                    let gain = audioCtx.createGain();
+                    osc.type = type;
+                    osc.frequency.setValueAtTime(freq, audioCtx.currentTime);
+                    gain.gain.setValueAtTime(0.3, audioCtx.currentTime);
+                    gain.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + duration);
+                    osc.connect(gain);
+                    gain.connect(audioCtx.destination);
+                    osc.start();
+                    osc.stop(audioCtx.currentTime + duration);
+                }, delay * 1000);
+            } catch (e) {
+                console.log("Audio play error:", e);
+            }
+        }
+
+        function playCorrectSound() {
+            playTone(523.25, 'sine', 0.15, 0);   // C5
+            playTone(659.25, 'sine', 0.15, 0.1); // E5
+            playTone(783.99, 'sine', 0.25, 0.2); // G5
+            playTone(1046.50, 'sine', 0.4, 0.3); // C6
+        }
+
+        function playWrongSound() {
+            playTone(220, 'sawtooth', 0.2, 0);   // A3
+            playTone(196, 'sawtooth', 0.3, 0.15); // G3
+        }
+
+        function playVictorySound() {
+            playTone(523.25, 'triangle', 0.2, 0);
+            playTone(659.25, 'triangle', 0.2, 0.15);
+            playTone(783.99, 'triangle', 0.2, 0.3);
+            playTone(1046.50, 'triangle', 0.5, 0.45);
+        }
+
+        // Web Speech API - Thai Speech Synthesis
+        function speakThai(text) {
+            if (!gameState.voiceEnabled || !('speechSynthesis' in window)) return;
+            window.speechSynthesis.cancel(); // Stop prior speech
+            let utterance = new SpeechSynthesisUtterance(text);
+            utterance.lang = 'th-TH';
+            utterance.rate = 1.0;
+            window.speechSynthesis.speak(utterance);
+        }
+
+        // Grade 2 Math Question Generator
+        function generateGrade2Questions() {
+            let list = [];
+            
+            // 1. Addition within 1000
+            let a = Math.floor(Math.random() * 300) + 100;
+            let b = Math.floor(Math.random() * 300) + 50;
+            let ans = a + b;
+            list.push({ q: `${a} + ${b} = ?`, ans: ans, options: shuffleAnswers(ans, [ans + 10, ans - 5, ans + 2]) });
+
+            // 2. Subtraction within 1000
+            a = Math.floor(Math.random() * 500) + 200;
+            b = Math.floor(Math.random() * 150) + 30;
+            ans = a - b;
+            list.push({ q: `${a} - ${b} = ?`, ans: ans, options: shuffleAnswers(ans, [ans + 10, ans - 10, ans + 5]) });
+
+            // 3. Multiplication (2, 3, 5, 10 multiplication tables)
+            let m1 = [2, 3, 4, 5, 10][Math.floor(Math.random() * 5)];
+            let m2 = Math.floor(Math.random() * 9) + 2;
+            ans = m1 * m2;
+            list.push({ q: `${m1} × ${m2} = ?`, ans: ans, options: shuffleAnswers(ans, [ans + m1, ans - m1, ans + 2]) });
+
+            // 4. Division (Simple)
+            let d1 = Math.floor(Math.random() * 8) + 2;
+            let d2 = Math.floor(Math.random() * 5) + 2;
+            let total = d1 * d2;
+            ans = d1;
+            list.push({ q: `${total} ÷ ${d2} = ?`, ans: ans, options: shuffleAnswers(ans, [ans + 1, ans - 1, ans + 2]) });
+
+            // 5. Pattern Recognition
+            let start = Math.floor(Math.random() * 20) + 10;
+            let step = [2, 5, 10][Math.floor(Math.random() * 3)];
+            let p1 = start, p2 = start + step, p3 = start + step * 2;
+            ans = start + step * 3;
+            list.push({ q: `${p1}, ${p2}, ${p3}, [ ? ]`, ans: ans, options: shuffleAnswers(ans, [ans + step, ans - 1, ans + 2]) });
+
+            // 6. Word Problem (Addition)
+            a = Math.floor(Math.random() * 40) + 30;
+            b = Math.floor(Math.random() * 30) + 20;
+            ans = a + b;
+            list.push({ q: `มีเหรียญทอง ${a} เหรียญ เก็บเพิ่ม ${b} เหรียญ มีรวมกี่เหรียญ?`, ans: ans, options: shuffleAnswers(ans, [ans + 10, ans - 5, ans + 2]) });
+
+            // 7. Addition with carrying
+            a = Math.floor(Math.random() * 80) + 115;
+            b = Math.floor(Math.random() * 80) + 128;
+            ans = a + b;
+            list.push({ q: `${a} + ${b} = ?`, ans: ans, options: shuffleAnswers(ans, [ans + 10, ans - 10, ans + 1]) });
+
+            // 8. Multiplication Word Problem
+            a = Math.floor(Math.random() * 4) + 3;
+            b = 5;
+            ans = a * b;
+            list.push({ q: `ถุงสมบัติ ${a} ถุง แต่ละถุงมี ${b} เหรียญ มีเหรียญทั้งหมดกี่เหรียญ?`, ans: ans, options: shuffleAnswers(ans, [ans + 5, ans - 5, ans + 2]) });
+
+            // 9. Subtraction with borrowing
+            a = Math.floor(Math.random() * 200) + 300;
+            b = Math.floor(Math.random() * 90) + 115;
+            ans = a - b;
+            list.push({ q: `${a} - ${b} = ?`, ans: ans, options: shuffleAnswers(ans, [ans + 10, ans - 10, ans + 5]) });
+
+            // 10. Advanced Grade 2 Mixed Operations
+            a = Math.floor(Math.random() * 5) + 2;
+            b = 4;
+            let c = 15;
+            ans = (a * b) + c;
+            list.push({ q: `(${a} × ${b}) + ${c} = ?`, ans: ans, options: shuffleAnswers(ans, [ans + 4, ans - 5, ans + 10]) });
+
+            return list;
+        }
+
+        function shuffleAnswers(correct, distractors) {
+            let options = [correct, ...distractors.slice(0, 2)];
+            for (let i = options.length - 1; i > 0; i--) {
+                const j = Math.floor(Math.random() * (i + 1));
+                [options[i], options[j]] = [options[j], options[i]];
+            }
+            return options;
+        }
+
+        // Three.js 3D Engine Variables
+        let scene, camera, renderer;
+        let chests = [];
+        let playerTorch;
+        let chestLabels = [];
+        let caveParticles;
+
+        function initThreeJS() {
+            const container = document.getElementById('canvas-container');
+            
+            // Scene Setup
+            scene = new THREE.Scene();
+            scene.fog = new THREE.FogExp2(0x0a0c16, 0.035);
+
+            // Camera Setup
+            camera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 0.1, 1000);
+            camera.position.set(0, 3.5, 9);
+            camera.lookAt(0, 2, 0);
+
+            // Renderer Setup
+            renderer = new THREE.WebGLRenderer({ antialias: true });
+            renderer.setSize(window.innerWidth, window.innerHeight);
+            renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+            renderer.shadowMap.enabled = true;
+            container.appendChild(renderer.domElement);
+
+            // Lighting
+            const ambientLight = new THREE.AmbientLight(0x1a2035, 1.2);
+            scene.add(ambientLight);
+
+            const mainSpotlight = new THREE.SpotLight(0xffd700, 2);
+            mainSpotlight.position.set(0, 12, 5);
+            mainSpotlight.angle = Math.PI / 4;
+            mainSpotlight.penumbra = 0.5;
+            scene.add(mainSpotlight);
+
+            // Build Cave Environment
+            createCaveEnvironment();
+
+            // Create Player Torch Avatar
+            createPlayerTorch();
+
+            // Handle Resize
+            window.addEventListener('resize', onWindowResize);
+        }
+
+        function createCaveEnvironment() {
+            // Cave Floor
+            const floorGeo = new THREE.PlaneGeometry(30, 40);
+            const floorMat = new THREE.MeshStandardMaterial({ 
+                color: 0x151a28, 
+                roughness: 0.8, 
+                metalness: 0.2 
+            });
+            const floor = new THREE.Mesh(floorGeo, floorMat);
+            floor.rotation.x = -Math.PI / 2;
+            floor.position.z = -10;
+            scene.add(floor);
+
+            // Side Pillars/Walls
+            const pillarGeo = new THREE.CylinderGeometry(0.8, 1.2, 12, 8);
+            const pillarMat = new THREE.MeshStandardMaterial({ color: 0x0d121d, roughness: 0.9 });
+
+            for (let i = -15; i <= 5; i += 6) {
+                const leftPillar = new THREE.Mesh(pillarGeo, pillarMat);
+                leftPillar.position.set(-6.5, 4, i);
+                scene.add(leftPillar);
+
+                const rightPillar = new THREE.Mesh(pillarGeo, pillarMat);
+                rightPillar.position.set(6.5, 4, i);
+                scene.add(rightPillar);
+            }
+
+            // Glowing Particles in Air
+            const particleGeo = new THREE.BufferGeometry();
+            const count = 250;
+            const posArray = new Float32Array(count * 3);
+
+            for (let i = 0; i < count * 3; i += 3) {
+                posArray[i] = (Math.random() - 0.5) * 20;
+                posArray[i + 1] = Math.random() * 8;
+                posArray[i + 2] = (Math.random() - 0.5) * 20;
+            }
+
+            particleGeo.setAttribute('position', new THREE.BufferAttribute(posArray, 3));
+            const particleMat = new THREE.PointsMaterial({
+                size: 0.08,
+                color: 0xffd700,
+                transparent: true,
+                opacity: 0.6
+            });
+
+            caveParticles = new THREE.Points(particleGeo, particleMat);
+            scene.add(caveParticles);
+        }
+
+        function createPlayerTorch() {
+            const torchGroup = new THREE.Group();
+
+            // Torch handle
+            const handleGeo = new THREE.CylinderGeometry(0.08, 0.08, 1.2, 8);
+            const handleMat = new THREE.MeshStandardMaterial({ color: 0x5c3a21 });
+            const handle = new THREE.Mesh(handleGeo, handleMat);
+            torchGroup.add(handle);
+
+            // Flame Sphere
+            const flameGeo = new THREE.SphereGeometry(0.25, 12, 12);
+            const flameMat = new THREE.MeshBasicMaterial({ color: 0xff6600 });
+            const flame = new THREE.Mesh(flameGeo, flameMat);
+            flame.position.y = 0.6;
+            torchGroup.add(flame);
+
+            // Light Source
+            const torchLight = new THREE.PointLight(0xffaa00, 2.5, 10);
+            torchLight.position.y = 0.7;
+            torchGroup.add(torchLight);
+
+            torchGroup.position.set(0, 1.2, 5);
+            playerTorch = torchGroup;
+            scene.add(playerTorch);
+        }
+
+        function createTreasureChests() {
+            // Remove old chests if any
+            chests.forEach(c => scene.remove(c.mesh));
+            chests = [];
+
+            chestLabels.forEach(lbl => lbl.remove());
+            chestLabels = [];
+
+            const xPositions = [-3.2, 0, 3.2]; // Left, Center, Right zones
+
+            for (let i = 0; i < 3; i++) {
+                const chestGroup = new THREE.Group();
+
+                // Chest Body
+                const bodyGeo = new THREE.BoxGeometry(1.4, 0.9, 1.0);
+                const bodyMat = new THREE.MeshStandardMaterial({ color: 0x6e3b12, roughness: 0.6 });
+                const body = new THREE.Mesh(bodyGeo, bodyMat);
+                body.position.y = 0.45;
+                chestGroup.add(body);
+
+                // Gold Trim
+                const trimGeo = new THREE.BoxGeometry(1.44, 0.2, 1.04);
+                const trimMat = new THREE.MeshStandardMaterial({ color: 0xffd700, metalness: 0.8, roughness: 0.2 });
+                const trim = new THREE.Mesh(trimGeo, trimMat);
+                trim.position.y = 0.45;
+                chestGroup.add(trim);
+
+                // Chest Lid
+                const lidGeo = new THREE.CylinderGeometry(0.52, 0.52, 1.4, 12, 1, false, 0, Math.PI);
+                const lid = new THREE.Mesh(lidGeo, bodyMat);
+                lid.rotation.z = Math.PI / 2;
+                lid.position.y = 0.9;
+                chestGroup.add(lid);
+
+                chestGroup.position.set(xPositions[i], 0, 0);
+                scene.add(chestGroup);
+
+                chests.push({
+                    mesh: chestGroup,
+                    zone: i,
+                    value: 0
+                });
+
+                // HTML Label Overlay
+                const label = document.createElement('div');
+                label.className = 'word-label';
+                label.style.display = 'none';
+                document.body.appendChild(label);
+                chestLabels.push(label);
+            }
+        }
+
+        function updateLabelsPosition() {
+            if (!gameState.isPlaying) return;
+
+            chests.forEach((chest, index) => {
+                const tempV = new THREE.Vector3();
+                chest.mesh.getWorldPosition(tempV);
+                tempV.y += 1.3; // Above chest
+
+                tempV.project(camera);
+
+                const x = (tempV.x *  .5 + .5) * window.innerWidth;
+                const y = (tempV.y * -.5 + .5) * window.innerHeight;
+
+                const lbl = chestLabels[index];
+                if (lbl) {
+                    lbl.style.transform = `translate(-50%, -50%) translate(${x}px,${y}px)`;
+                }
+            });
+        }
+
+        function onWindowResize() {
+            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+        }
+
+        // MediaPipe Hand Tracking Setup
+        let hands, cameraUtils;
+
+        function initMediaPipe() {
+            const videoElement = document.getElementById('webcam-video');
+            const camStatusEl = document.getElementById('cam-status');
+
+            hands = new Hands({
+                locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/hands/${file}`
+            });
+
+            hands.setOptions({
+                maxNumHands: 1,
+                modelComplexity: 1,
+                minDetectionConfidence: 0.5,
+                minTrackingConfidence: 0.5
+            });
+
+            hands.onResults(onHandResults);
+
+            cameraUtils = new Camera(videoElement, {
+                onFrame: async () => {
+                    await hands.send({ image: videoElement });
+                },
+                width: 640,
+                height: 480
+            });
+
+            cameraUtils.start().then(() => {
+                camStatusEl.className = "check-status success";
+                camStatusEl.innerText = "พร้อมใช้งาน";
+                document.getElementById('start-btn').disabled = false;
+                document.getElementById('start-btn').innerText = "⚔️ เริ่มการผจญภัย!";
+            }).catch(err => {
+                console.warn("Camera failed:", err);
+                camStatusEl.className = "check-status error";
+                camStatusEl.innerText = "ไม่พบกล้อง (ใช้โหมดสัมผัส/คีย์บอร์ดได้)";
+                document.getElementById('start-btn').disabled = false;
+                document.getElementById('start-btn').innerText = "⚔️ เริ่มการผจญภัย (โหมดสัมผัส/คีย์บอร์ด)";
+            });
+        }
+
+        function onHandResults(results) {
+            if (!gameState.isPlaying || !results.multiHandLandmarks || results.multiHandLandmarks.length === 0) return;
+
+            const landmarks = results.multiHandLandmarks[0];
+            // Index Finger Tip (Landmark 8) or Wrist (0)
+            const handX = landmarks[8].x; // Normalized [0.0, 1.0]
+
+            // Mirrored camera coordinate logic
+            // Left region (< 0.38) -> Right Zone (2)
+            // Center region (0.38 - 0.62) -> Center Zone (1)
+            // Right region (> 0.62) -> Left Zone (0)
+            if (handX > 0.62) {
+                selectZone(0); // Left
+            } else if (handX < 0.38) {
+                selectZone(2); // Right
+            } else {
+                selectZone(1); // Center
+            }
+        }
+
+        function selectZone(zoneIndex) {
+            if (!gameState.canAnswer) return;
+
+            gameState.currentZone = zoneIndex;
+
+            // Move player torch towards target zone
+            const xTargets = [-3.2, 0, 3.2];
+            if (playerTorch) {
+                playerTorch.position.x = xTargets[zoneIndex];
+            }
+
+            // Trigger Answer Checking after short positioning hold
+            checkAnswer(zoneIndex);
+        }
+
+        function checkAnswer(chosenZone) {
+            gameState.canAnswer = false;
+
+            const q = gameState.questions[gameState.currentQuestion];
+            const chosenVal = chests[chosenZone].value;
+            const isCorrect = (chosenVal === q.ans);
+
+            const popupEl = document.getElementById('popup-center');
+
+            if (isCorrect) {
+                gameState.score += 100;
+                document.getElementById('hud-score').innerText = gameState.score;
+                playCorrectSound();
+                speakThai("ถูกต้องแล้วครับ!");
+
+                popupEl.innerText = "✨ ถูกต้อง! (+100) ✨";
+                popupEl.className = "show popup-green";
+
+                // Animate Chest Opening
+                chests[chosenZone].mesh.rotation.y += 0.3;
+            } else {
+                gameState.hp -= 1;
+                updateHPDisplay();
+                playWrongSound();
+                speakThai(`ยังไม่ถูกครับ คำตอบที่ถูกต้องคือ ${q.ans}`);
+
+                popupEl.innerText = `❌ ผิด! คำตอบคือ ${q.ans}`;
+                popupEl.className = "show popup-red";
+            }
+
+            setTimeout(() => {
+                popupEl.className = "";
+                if (gameState.hp <= 0) {
+                    endGame(false);
+                } else {
+                    nextQuestion();
+                }
+            }, 2200);
+        }
+
+        function updateHPDisplay() {
+            let hearts = "";
+            for (let i = 0; i < gameState.hp; i++) hearts += "❤️";
+            document.getElementById('hud-hp').innerText = hearts || "💀 หมดพลัง";
+        }
+
+        function nextQuestion() {
+            gameState.currentQuestion++;
+
+            if (gameState.currentQuestion >= gameState.totalQuestions) {
+                endGame(true);
+                return;
+            }
+
+            setupQuestionUI();
+        }
+
+        function setupQuestionUI() {
+            gameState.canAnswer = true;
+            const q = gameState.questions[gameState.currentQuestion];
+
+            document.getElementById('hud-level').innerText = `${gameState.currentQuestion + 1}/${gameState.totalQuestions}`;
+            document.getElementById('question-text').innerText = q.q;
+
+            // Read question aloud
+            speakThai(`ข้อที่ ${gameState.currentQuestion + 1}. ${q.q.replace('?', 'เท่ากับเท่าไร')}`);
+
+            // Assign options to chests
+            chests.forEach((chest, i) => {
+                chest.value = q.options[i];
+                chest.mesh.rotation.y = 0; // Reset chest angle
+
+                const lbl = chestLabels[i];
+                if (lbl) {
+                    lbl.innerText = q.options[i];
+                    lbl.style.display = 'block';
+                }
+            });
+        }
+
+        function startGame() {
+            document.getElementById('start-screen').classList.add('hidden');
+            document.getElementById('end-screen').classList.add('hidden');
+            document.getElementById('game-ui').style.display = 'block';
+
+            gameState.score = 0;
+            gameState.currentQuestion = 0;
+            gameState.hp = 3;
+            gameState.isPlaying = true;
+            gameState.questions = generateGrade2Questions();
+
+            document.getElementById('hud-score').innerText = '0';
+            updateHPDisplay();
+
+            createTreasureChests();
+            setupQuestionUI();
+        }
+
+        function endGame(isVictory) {
+            gameState.isPlaying = false;
+            document.getElementById('game-ui').style.display = 'none';
+            document.getElementById('end-screen').classList.remove('hidden');
+
+            chestLabels.forEach(lbl => lbl.style.display = 'none');
+
+            const titleEl = document.getElementById('end-title');
+            const subEl = document.getElementById('end-subtitle');
+            
+            if (isVictory) {
+                titleEl.innerText = "🏆 ภารกิจสำเร็จ! 🏆";
+                subEl.innerText = "ยินดีด้วย! คุณรอดชีวิตและได้ขุมทรัพย์กลับไป";
+                playVictorySound();
+                speakThai("ยินดีด้วยครับ คุณผ่านด่าน ล่าสมบัติมรณะ สำเร็จแล้ว!");
+            } else {
+                titleEl.innerText = "💀 พ่ายแพ้แก่กับดัก! 💀";
+                subEl.innerText = "พลังชีวิตหมดลงก่อนเปิดหีบสุดท้าย";
+                speakThai("พยายามอีกครั้งนะครับ คุณทำได้ดีแล้ว!");
+            }
+
+            document.getElementById('final-score').innerText = gameState.score;
+            document.getElementById('final-correct').innerText = `${Math.floor(gameState.score / 100)}/10`;
+        }
+
+        function bindEvents() {
+            document.getElementById('start-btn').addEventListener('click', () => {
+                initAudio();
+                startGame();
+            });
+
+            document.getElementById('restart-btn').addEventListener('click', () => {
+                startGame();
+            });
+
+            // Toggles
+            document.getElementById('toggle-voice').addEventListener('click', (e) => {
+                gameState.voiceEnabled = !gameState.voiceEnabled;
+                e.currentTarget.classList.toggle('off', !gameState.voiceEnabled);
+                e.currentTarget.querySelector('span').innerText = gameState.voiceEnabled ? 'เปิด' : 'ปิด';
+            });
+
+            document.getElementById('toggle-sfx').addEventListener('click', (e) => {
+                gameState.sfxEnabled = !gameState.sfxEnabled;
+                e.currentTarget.classList.toggle('off', !gameState.sfxEnabled);
+                e.currentTarget.querySelector('span').innerText = gameState.sfxEnabled ? 'เปิด' : 'ปิด';
+            });
+
+            document.getElementById('toggle-cam-view').addEventListener('click', (e) => {
+                const prev = document.getElementById('webcam-preview');
+                const isOff = prev.style.display === 'none' || prev.style.display === '';
+                prev.style.display = isOff ? 'block' : 'none';
+                e.currentTarget.classList.toggle('off', !isOff);
+                e.currentTarget.querySelector('span').innerText = isOff ? 'เปิด' : 'ปิด';
+
+                if (isOff && document.getElementById('webcam-video')) {
+                    prev.appendChild(document.getElementById('webcam-video'));
+                    document.getElementById('webcam-video').style.display = 'block';
+                }
+            });
+
+            // Keyboard Controls (A, S, D)
+            window.addEventListener('keydown', (e) => {
+                if (!gameState.isPlaying) return;
+                if (e.key === 'a' || e.key === 'A' || e.key === 'ArrowLeft') {
+                    selectZone(0);
+                } else if (e.key === 's' || e.key === 'S' || e.key === 'ArrowDown') {
+                    selectZone(1);
+                } else if (e.key === 'd' || e.key === 'D' || e.key === 'ArrowRight') {
+                    selectZone(2);
+                }
+            });
+        }
+
+        // Animation Loop
+        function animate() {
+            requestAnimationFrame(animate);
+
+            // Floating animations
+            if (caveParticles) {
+                caveParticles.rotation.y += 0.0008;
+            }
+
+            if (gameState.isPlaying) {
+                chests.forEach((chest, i) => {
+                    chest.mesh.position.y = Math.sin(Date.now() * 0.003 + i) * 0.08;
+                });
+                updateLabelsPosition();
+            }
+
+            renderer.render(scene, camera);
+        }
+
+        // Initialization Entry
+        window.onload = function () {
+            initThreeJS();
+            bindEvents();
+            initMediaPipe();
+            animate();
+        };
+    </script>
+</body>
+</html>
